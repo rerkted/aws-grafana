@@ -24,9 +24,8 @@ variable "key_pair_name" {
 }
 
 variable "home_ip_cidr" {
-  description = "Home IP in CIDR notation — allowed HTTPS + SSH access"
+  description = "Home IP in CIDR notation — allowed HTTPS + SSH access e.g. 1.2.3.4/32"
   type        = string
-  default     = "REDACTED_IP/32"
   sensitive   = true
 }
 

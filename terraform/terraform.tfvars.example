@@ -1,5 +1,5 @@
 key_pair_name = "your-key-pair-name"
 admin_email   = "you@example.com"
-# home_ip_cidr       = "YOUR.IP.HERE/32"     # defaults to REDACTED_IP/32
-# portfolio_eip_cidr = "PORTFOLIO.EIP/32"    # defaults to 54.157.124.168/32
-# instance_type      = "t3.micro"            # default
+home_ip_cidr  = "YOUR.IP.HERE/32"   # run: curl ifconfig.me
+# instance_type = "t3.micro"        # default
+# domain_name   = "grafana.rerktserver.com"  # default
