@@ -47,7 +47,8 @@ jobs:
 
               \"# ── Write env file with credentials\",
               \"printf 'GRAFANA_USER=%s\\nGRAFANA_PASSWORD=%s\\n' '${{ secrets.GRAFANA_USER }}' '${{ secrets.GRAFANA_PASSWORD }}' > .env\",
-              \"chmod 600 .env\",
+              \"chmod 640 .env\",
+              \"chown ec2-user:ec2-user .env\",
 
               \"# ── Pull images and start stack\",
               \"docker compose pull\",
