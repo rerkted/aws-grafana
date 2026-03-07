@@ -15,7 +15,10 @@ echo "=== Bootstrap started at $(date) ==="
 
 # ── 1. Install dependencies ───────────────────────────────────
 dnf update -y
-dnf install -y docker git python3-pip
+dnf install -y docker git python3-pip amazon-ssm-agent
+
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
 pip3 install certbot
 
 systemctl enable docker
