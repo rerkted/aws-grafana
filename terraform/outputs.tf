@@ -2,12 +2,12 @@
 
 output "grafana_public_ip" {
   value       = aws_eip.grafana.public_ip
-  description = "Grafana EC2 Elastic IP — add as GitHub Secret GRAFANA_EC2_IP in aws-server repo for Loki endpoint"
+  description = "Grafana EC2 Elastic IP — stored automatically in SSM at /rerktserver/grafana/eip"
 }
 
 output "grafana_instance_id" {
   value       = aws_instance.grafana.id
-  description = "Grafana EC2 instance ID — add as GitHub Secret EC2_INSTANCE_ID in aws-grafana repo"
+  description = "Grafana EC2 instance ID — stored automatically in SSM at /rerktserver/grafana/instance-id"
 }
 
 output "loki_endpoint" {
