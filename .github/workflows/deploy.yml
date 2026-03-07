@@ -41,7 +41,7 @@ jobs:
               \"if ! docker compose version &>/dev/null 2>&1; then mkdir -p /usr/local/lib/docker/cli-plugins && curl -SL https://github.com/docker/compose/releases/download/v2.35.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; fi\",
 
               \"# ── Clone or update repo\",
-              \"if [ -d /home/ec2-user/aws-grafana ]; then cd /home/ec2-user/aws-grafana && git pull; else git clone https://github.com/rerkted/aws-grafana.git /home/ec2-user/aws-grafana; fi\",
+              \"if [ -d /home/ec2-user/aws-grafana/.git ]; then cd /home/ec2-user/aws-grafana && git pull; else rm -rf /home/ec2-user/aws-grafana && git clone https://github.com/rerkted/aws-grafana.git /home/ec2-user/aws-grafana; fi\",
 
               \"cd /home/ec2-user/aws-grafana\",
 
