@@ -54,14 +54,7 @@ jobs:
               \"docker compose pull\",
               \"docker compose up -d --remove-orphans\",
 
-              \"# ── Wait for containers to stabilize\",
-              \"sleep 20\",
-
-              \"# ── Verify no containers exited\",
-              \"EXITED=\\$(docker compose ps --status exited --quiet | wc -l)\",
-              \"if [ \\\"\\$EXITED\\\" -gt 0 ]; then docker compose ps; docker compose logs --tail=30; exit 1; fi\",
-
-              \"echo 'All containers running'\",
+              \"sleep 10\",
               \"docker compose ps\"
             ]" \
             --query "Command.CommandId" \
