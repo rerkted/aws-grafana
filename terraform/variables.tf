@@ -30,12 +30,6 @@ variable "home_ip_cidr" {
   sensitive   = true
 }
 
-variable "portfolio_eip_cidr" {
-  description = "Portfolio EC2 Elastic IP in CIDR — allowed to push logs to Loki"
-  type        = string
-  default     = "54.157.124.168/32"
-}
-
 variable "admin_email" {
   description = "Email for Let's Encrypt cert expiry notifications"
   type        = string

@@ -1,62 +1,165 @@
-# Project 08 — Grafana + Loki Observability Stack
+# aws-grafana — Observability Stack
 
-Centralized log aggregation and visualization for the rerktserver.com portfolio infrastructure.
-Deployed at `grafana.rerktserver.com` — IP whitelisted, login required.
+Dedicated EC2 instance running Grafana, Loki, and Promtail for centralized log observability across the rerktserver.com infrastructure.
+
+---
+
+## What This Does
+
+Collects and visualizes logs from all containers running on the portfolio EC2 (rerktserver.com) — nginx access logs, AI proxy logs, and system/auth logs — in a single Grafana dashboard at [grafana.rerktserver.com](https://grafana.rerktserver.com).
+
+---
 
 ## Architecture
 
 ```
-portfolio (nginx)  ─┐
-rerkt-ai (node)   ──┤──▶ Promtail ──▶ Loki ──▶ Grafana
-bedrock-ai (node) ─┘                              │
-                                                   ▼
-                                        grafana.rerktserver.com
+portfolio EC2 (rerktserver.com)
+  └── Promtail (systemd service)
+        ├── Docker socket → portfolio, rerkt-ai, bedrock-ai container logs
+        ├── /var/log/secure → SSH / auth events (CSPM)
+        └── /var/log/messages → system logs
+              │
+              │ HTTP :3100 (Security Group whitelist: portfolio EIP only)
+              ▼
+Grafana EC2 (grafana.rerktserver.com)
+  └── Docker Compose
+        ├── Loki      → log storage and query engine
+        ├── Promtail  → scrapes Grafana EC2 container logs
+        ├── Grafana   → visualization UI (port 3000, behind nginx)
+        └── nginx     → SSL termination, reverse proxy (ports 80/443)
 ```
 
-## Stack
+---
 
-| Service  | Image                    | Port          | Purpose                    |
-|----------|--------------------------|---------------|----------------------------|
-| Loki     | grafana/loki:2.9.0       | 3100 internal | Log storage & query engine |
-| Promtail | grafana/promtail:2.9.0   | 9080 internal | Docker log shipper         |
-| Grafana  | grafana/grafana:10.2.0   | 3000 internal | Dashboard & visualization  |
+## Components
 
-All services run via Docker Compose. nginx proxies `grafana.rerktserver.com` → `127.0.0.1:3000`.
+| Component | Image | Purpose |
+|-----------|-------|---------|
+| Grafana | `grafana/grafana:10.2.0` | Dashboard and alerting UI |
+| Loki | `grafana/loki:2.9.0` | Log aggregation and storage |
+| Promtail | `grafana/promtail:2.9.0` | Log collector (Grafana EC2 containers) |
+| nginx | `nginx:1.27-alpine` | SSL termination via Let's Encrypt |
 
-## Security
+---
 
-- Grafana port 3000 bound to `127.0.0.1` only (not publicly exposed)
-- AWS Security Group restricts port 443 for `grafana.rerktserver.com` to home IP
-- Grafana login required — anonymous access disabled
-- Sign-up disabled
+## Infrastructure
 
-## GitHub Secrets Required
+All infrastructure is managed by Terraform in `terraform/`.
 
-| Secret            | Description                  |
-|-------------------|------------------------------|
-| `GRAFANA_USER`    | Grafana admin username        |
-| `GRAFANA_PASSWORD`| Grafana admin password        |
+| Resource | Description |
+|----------|-------------|
+| VPC + public subnet | Isolated network for Grafana EC2 |
+| EC2 (t3.micro) | Hosts the Docker Compose stack |
+| Elastic IP | Static public IP — DNS never needs updating |
+| Security Group | Port 443 (home IP), 22 (home IP), 3100 (portfolio EIP only) |
+| IAM Role | `AmazonSSMManagedInstanceCore` — SSM deploy, no SSH in CI/CD |
+| Route53 A record | `grafana.rerktserver.com` → Elastic IP |
+| SSM Parameter Store | `/rerktserver/grafana/eip` and `/rerktserver/grafana/instance-id` |
+
+---
+
+## SSM Parameter Store Integration
+
+Terraform writes two parameters to AWS SSM on every `apply`:
+
+- `/rerktserver/grafana/eip` — Grafana Elastic IP (read by aws-server Promtail at boot)
+- `/rerktserver/grafana/instance-id` — EC2 instance ID (read by GitHub Actions deploy workflow)
+
+Terraform reads one parameter from SSM:
+
+- `/rerktserver/portfolio/eip` — Portfolio Elastic IP (used to lock Loki port 3100 in the security group)
+
+No hardcoded IPs or instance IDs anywhere. Destroy and recreate the stack — everything updates automatically.
+
+---
 
 ## Deployment
 
+### First-time setup (deploy order matters)
+
+1. Deploy `aws-server` first — stores portfolio EIP in SSM
+2. Deploy `aws-grafana` — reads portfolio EIP from SSM for security group
+
 ```bash
-# 1. Terraform — Route53 + Security Group + EC2 resize
-cd terraform
-terraform init
-terraform apply
+# In aws-server/terraform
+terraform init && terraform apply
 
-# 2. Expand SSL cert on EC2
-sudo certbot certonly --webroot -w /var/www/certbot \
-  -d rerktserver.com -d www.rerktserver.com \
-  -d ai.rerktserver.com -d bedrock.rerktserver.com \
-  -d grafana.rerktserver.com \
-  --expand --non-interactive --agree-tos --email Edwardrerk@proton.me
-sudo docker restart portfolio
+# In aws-grafana/terraform
+terraform init && terraform apply
+```
 
-# 3. Push to main — pipeline deploys stack via SSM
+### Application deploy
+
+Push to `main` — GitHub Actions deploys via SSM (no SSH, no static credentials):
+
+```bash
 git push origin main
 ```
 
-## Log Retention
+The workflow:
+1. Reads instance ID from SSM (`/rerktserver/grafana/instance-id`)
+2. Sends SSM RunShellScript command to the instance
+3. Instance pulls latest repo, writes `.env`, runs `docker compose up -d`
 
-Loki is configured with 7-day retention to keep storage low on t3.micro.
+### Teardown and rebuild
+
+```bash
+terraform destroy
+terraform apply
+```
+
+New instance ID and EIP are automatically written to SSM. The GitHub Actions workflow picks them up on the next push with no manual steps.
+
+---
+
+## GitHub Secrets Required
+
+| Secret | Description |
+|--------|-------------|
+| `GRAFANA_USER` | Grafana admin username |
+| `GRAFANA_PASSWORD` | Grafana admin password |
+
+No instance IDs or IPs stored as secrets — those come from SSM.
+
+---
+
+## Querying Logs in Grafana
+
+**URL:** https://grafana.rerktserver.com
+
+### Useful LogQL queries
+
+```logql
+# All portfolio EC2 container logs
+{container=~"portfolio|rerkt-ai|bedrock-ai"}
+
+# nginx access logs (site visits)
+{container="portfolio"}
+
+# Failed SSH login attempts (CSPM)
+{job="auth"} |= "Failed password"
+
+# Sudo usage (CSPM)
+{job="auth"} |= "sudo"
+
+# All system logs
+{job="system"}
+
+# Log volume over time (for dashboards)
+sum(count_over_time({container="portfolio"}[5m]))
+```
+
+---
+
+## Bootstrap Process
+
+On first boot, `terraform/userdata.sh` runs once and:
+
+1. Installs Docker, SSM agent, certbot, Docker Compose (binary — not in AL2023 repos)
+2. Starts a temporary nginx container to serve the ACME challenge
+3. Issues SSL certificate via Let's Encrypt (certbot webroot)
+4. Stops the temporary nginx
+5. Sets up certbot auto-renewal cron (twice daily)
+6. Creates `/home/ec2-user/aws-grafana` for the app
+
+The actual stack (Grafana, Loki, Promtail, nginx) is deployed by GitHub Actions after bootstrap completes.

@@ -7,3 +7,25 @@ resource "aws_eip" "grafana" {
 
   tags = { Name = "grafana-eip" }
 }
+
+# Store Grafana EIP and instance ID in SSM — deploy workflow reads these dynamically
+resource "aws_ssm_parameter" "grafana_eip" {
+  name  = "/rerktserver/grafana/eip"
+  type  = "String"
+  value = aws_eip.grafana.public_ip
+
+  tags = { Name = "grafana-eip" }
+}
+
+resource "aws_ssm_parameter" "grafana_instance_id" {
+  name  = "/rerktserver/grafana/instance-id"
+  type  = "String"
+  value = aws_instance.grafana.id
+
+  tags = { Name = "grafana-instance-id" }
+}
+
+# Read portfolio EIP from SSM (set by aws-server terraform)
+data "aws_ssm_parameter" "portfolio_eip" {
+  name = "/rerktserver/portfolio/eip"
+}

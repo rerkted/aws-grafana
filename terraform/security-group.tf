@@ -33,12 +33,12 @@ resource "aws_security_group" "grafana" {
     description = "SSH (home IP only)"
   }
 
-  # Loki ingestion — portfolio EC2 Elastic IP only
+  # Loki ingestion — portfolio EC2 Elastic IP only (read from SSM)
   ingress {
     from_port   = 3100
     to_port     = 3100
     protocol    = "tcp"
-    cidr_blocks = [var.portfolio_eip_cidr]
+    cidr_blocks = ["${data.aws_ssm_parameter.portfolio_eip.value}/32"]
     description = "Loki log ingestion from portfolio EC2"
   }
 
