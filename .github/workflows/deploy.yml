@@ -1,0 +1,105 @@
+name: Deploy Grafana Stack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Grafana + Loki + Promtail
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM
+        timeout-minutes: 15
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 600 \
+            --parameters commands="[
+              \"set -euo pipefail\",
+
+              \"# ── Ensure docker compose plugin is installed\",
+              \"if ! docker compose version &>/dev/null 2>&1; then mkdir -p /usr/local/lib/docker/cli-plugins && curl -SL https://github.com/docker/compose/releases/download/v2.35.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; fi\",
+
+              \"# ── Clone or update repo\",
+              \"if [ -d /home/ec2-user/aws-grafana ]; then cd /home/ec2-user/aws-grafana && git pull; else git clone https://github.com/rerkted/aws-grafana.git /home/ec2-user/aws-grafana; fi\",
+
+              \"cd /home/ec2-user/aws-grafana\",
+
+              \"# ── Write env file with credentials\",
+              \"printf 'GRAFANA_USER=%s\\nGRAFANA_PASSWORD=%s\\n' '${{ secrets.GRAFANA_USER }}' '${{ secrets.GRAFANA_PASSWORD }}' > .env\",
+              \"chmod 600 .env\",
+
+              \"# ── Pull images and start stack\",
+              \"docker compose pull\",
+              \"docker compose up -d --remove-orphans\",
+
+              \"# ── Wait for containers to stabilize\",
+              \"sleep 20\",
+
+              \"# ── Verify no containers exited\",
+              \"EXITED=\\$(docker compose ps --status exited --quiet | wc -l)\",
+              \"if [ \\\"\\$EXITED\\\" -gt 0 ]; then docker compose ps; docker compose logs --tail=30; exit 1; fi\",
+
+              \"echo 'All containers running'\",
+              \"docker compose ps\"
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          # Poll for completion
+          for i in $(seq 1 60); do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+
+            echo "[$i/60] Status: $STATUS"
+
+            if [ "$STATUS" = "Success" ]; then
+              echo "Deployment successful"
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "TimedOut" ] || [ "$STATUS" = "Cancelled" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+                --query "StandardErrorContent" --output text
+              exit 1
+            fi
+          done
+
+          echo "Polling timed out"
+          exit 1
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## Grafana Stack Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Grafana | https://grafana.rerktserver.com |" >> $GITHUB_STEP_SUMMARY
+          echo "| Loki | internal port 3100 (portfolio EC2 log ingestion) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Promtail | scraping Grafana EC2 containers |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auth | OIDC (no static keys) |" >> $GITHUB_STEP_SUMMARY
