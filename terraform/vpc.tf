@@ -1,5 +1,5 @@
 # ─── vpc.tf ────────────────────────────────────────────────────
-# Standalone VPC for Grafana EC2 — independent from portfolio VPC
+## Standalone VPC for Grafana EC2 — independent from portfolio VPC
 
 resource "aws_vpc" "grafana" {
   cidr_block           = "10.1.0.0/16"
