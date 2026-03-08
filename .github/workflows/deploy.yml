@@ -7,7 +7,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ROLE_ARN: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+  ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
   SSM_INSTANCE_PARAM: /rerktserver/grafana/instance-id
 
 jobs:
@@ -116,7 +116,7 @@ jobs:
     with:
       ssm-instance-param: /rerktserver/grafana/instance-id
       compose-dir: /home/ec2-user/aws-grafana
-      role-arn: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       aws-region: us-east-1
     permissions:
       id-token: write
@@ -129,7 +129,7 @@ jobs:
     uses: rerkted/devsecops-pipeline/.github/workflows/cleanup.yml@main
     with:
       ssm-instance-param: /rerktserver/grafana/instance-id
-      role-arn: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       aws-region: us-east-1
     permissions:
       id-token: write
