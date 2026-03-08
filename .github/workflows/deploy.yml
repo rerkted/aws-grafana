@@ -7,15 +7,32 @@ on:
 
 env:
   AWS_REGION: us-east-1
-
-permissions:
-  id-token: write
-  contents: read
+  ROLE_ARN: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+  SSM_INSTANCE_PARAM: /rerktserver/grafana/instance-id
 
 jobs:
+  # ── STAGE 1: Security Scans ───────────────────────────────────
+  security:
+    name: "Stage 1 — Security"
+    uses: rerkted/devsecops-pipeline/.github/workflows/security.yml@main
+    with:
+      terraform-dir: terraform
+      node-dirs: '.'
+      language: javascript
+      fail-on-findings: false
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+  # ── STAGE 2: Deploy ───────────────────────────────────────────
   deploy:
-    name: Deploy Grafana + Loki + Promtail
+    name: "Stage 2 — Deploy"
     runs-on: ubuntu-latest
+    needs: security
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -24,14 +41,14 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+          role-to-assume: ${{ env.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy via SSM
         timeout-minutes: 15
         run: |
           INSTANCE_ID=$(aws ssm get-parameter \
-            --name "/rerktserver/grafana/instance-id" \
+            --name "${{ env.SSM_INSTANCE_PARAM }}" \
             --query "Parameter.Value" \
             --output text)
 
@@ -67,7 +84,6 @@ jobs:
 
           echo "SSM Command ID: $COMMAND_ID"
 
-          # Poll for completion
           for i in $(seq 1 60); do
             sleep 10
             STATUS=$(aws ssm get-command-invocation \
@@ -92,13 +108,45 @@ jobs:
           echo "Polling timed out"
           exit 1
 
-      - name: Summary
-        if: success()
-        run: |
-          echo "## Grafana Stack Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Details |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Grafana | https://grafana.rerktserver.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| Loki | internal port 3100 (portfolio EC2 log ingestion) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Promtail | scraping Grafana EC2 containers |" >> $GITHUB_STEP_SUMMARY
-          echo "| Auth | OIDC (no static keys) |" >> $GITHUB_STEP_SUMMARY
+  # ── STAGE 3: Verify ───────────────────────────────────────────
+  verify:
+    name: "Stage 3 — Verify"
+    needs: deploy
+    uses: rerkted/devsecops-pipeline/.github/workflows/verify.yml@main
+    with:
+      ssm-instance-param: /rerktserver/grafana/instance-id
+      compose-dir: /home/ec2-user/aws-grafana
+      role-arn: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+      aws-region: us-east-1
+    permissions:
+      id-token: write
+      contents: read
+
+  # ── STAGE 4: Cleanup ──────────────────────────────────────────
+  cleanup:
+    name: "Stage 4 — Cleanup"
+    needs: verify
+    uses: rerkted/devsecops-pipeline/.github/workflows/cleanup.yml@main
+    with:
+      ssm-instance-param: /rerktserver/grafana/instance-id
+      role-arn: arn:aws:iam::REDACTED_ACCOUNT_ID:role/github-actions-oidc-role
+      aws-region: us-east-1
+    permissions:
+      id-token: write
+      contents: read
+
+  # ── STAGE 5: Done ─────────────────────────────────────────────
+  done:
+    name: "Stage 5 — Done"
+    needs: [security, deploy, verify, cleanup]
+    if: always()
+    uses: rerkted/devsecops-pipeline/.github/workflows/done.yml@main
+    with:
+      security-result: ${{ needs.security.result }}
+      deploy-result: ${{ needs.deploy.result }}
+      verify-result: ${{ needs.verify.result }}
+      cleanup-result: ${{ needs.cleanup.result }}
+      service-name: Grafana Stack
+      service-url: https://grafana.rerktserver.com
+    permissions:
+      contents: read
