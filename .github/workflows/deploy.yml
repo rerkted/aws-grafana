@@ -116,8 +116,9 @@ jobs:
     with:
       ssm-instance-param: /rerktserver/grafana/instance-id
       compose-dir: /home/ec2-user/aws-grafana
-      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       aws-region: us-east-1
+    secrets:
+      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
     permissions:
       id-token: write
       contents: read
@@ -129,8 +130,9 @@ jobs:
     uses: rerkted/devsecops-pipeline/.github/workflows/cleanup.yml@main
     with:
       ssm-instance-param: /rerktserver/grafana/instance-id
-      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
       aws-region: us-east-1
+    secrets:
+      role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
     permissions:
       id-token: write
       contents: read
