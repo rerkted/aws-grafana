@@ -2,6 +2,8 @@
 # Grafana EC2 security group — minimal attack surface
 
 resource "aws_security_group" "grafana" {
+  #checkov:skip=CKV_AWS_260:Port 80 required for Let's Encrypt ACME webroot challenge
+  #checkov:skip=CKV_AWS_382:Unrestricted egress required — Grafana pulls images, fetches updates, scrapes external targets
   name        = "grafana-sg"
   description = "Grafana observability stack security group"
   vpc_id      = aws_vpc.grafana.id

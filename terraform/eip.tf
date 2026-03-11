@@ -10,6 +10,7 @@ resource "aws_eip" "grafana" {
 
 # Store Grafana EIP and instance ID in SSM — deploy workflow reads these dynamically
 resource "aws_ssm_parameter" "grafana_eip" {
+  #checkov:skip=CKV2_AWS_34:Grafana EIP is a public IP address — not sensitive data requiring SecureString
   name  = "/rerktserver/grafana/eip"
   type  = "String"
   value = aws_eip.grafana.public_ip
@@ -18,6 +19,7 @@ resource "aws_ssm_parameter" "grafana_eip" {
 }
 
 resource "aws_ssm_parameter" "grafana_instance_id" {
+  #checkov:skip=CKV2_AWS_34:EC2 instance ID is not sensitive — used for SSM targeting
   name  = "/rerktserver/grafana/instance-id"
   type  = "String"
   value = aws_instance.grafana.id

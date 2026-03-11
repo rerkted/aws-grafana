@@ -2,6 +2,8 @@
 # Dedicated t3.micro EC2 for Grafana observability stack
 
 resource "aws_instance" "grafana" {
+  #checkov:skip=CKV_AWS_135:T3 instances are automatically EBS-optimized; explicit flag unsupported
+  #checkov:skip=CKV_AWS_126:Detailed monitoring disabled intentionally — cost vs. benefit for t3.micro
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.grafana_public.id
@@ -14,6 +16,11 @@ resource "aws_instance" "grafana" {
     volume_type           = "gp3"
     delete_on_termination = true
     encrypted             = true
+  }
+
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
 
   user_data = base64encode(templatefile("${path.module}/userdata.sh", {
