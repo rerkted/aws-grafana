@@ -11,10 +11,3 @@ scrape_configs:
           instance: 'rerktserver.com'
           env: 'production'
 
-  # Container metrics — per-container CPU/memory/restarts via cAdvisor
-  - job_name: 'cadvisor'
-    static_configs:
-      - targets: ['PORTFOLIO_EIP:8080']
-        labels:
-          instance: 'rerktserver.com'
-          env: 'production'
