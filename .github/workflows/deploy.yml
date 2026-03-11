@@ -72,6 +72,10 @@ jobs:
               \"chmod 640 .env\",
               \"chown ec2-user:ec2-user .env\",
 
+              \"# ── Inject portfolio EIP into Prometheus scrape config\",
+              \"PORTFOLIO_EIP=\$(aws ssm get-parameter --name /rerktserver/portfolio/eip --query Parameter.Value --output text --region us-east-1)\",
+              \"sed -i s/PORTFOLIO_EIP/\$PORTFOLIO_EIP/g config/prometheus.yml\",
+
               \"# ── Pull images and start stack\",
               \"docker compose pull\",
               \"docker compose up -d --remove-orphans\",
