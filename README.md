@@ -34,12 +34,12 @@ Grafana EC2 (grafana.rerktserver.com)
         └── nginx      → SSL termination, reverse proxy (ports 80/443)
 
 portfolio EC2 (rerktserver.com)
-  ├── node-exporter  :9100 → host metrics (CPU, memory, disk, network)
-  └── cAdvisor       :8080 → per-container metrics
+  └── node-exporter  :9100 → host metrics (CPU, memory, disk, network)
               │
-              │ HTTP :9100/:8080 (Security Group whitelist: grafana EIP only)
+              │ HTTP :9100 (Security Group whitelist: grafana EIP only)
               ▼
         Prometheus (on Grafana EC2)
+        (cAdvisor :8080 disabled on t3.nano — OOM risk. Re-enable on t3.micro: see aws-server RUNBOOK)
 
 SSM Parameter Store
   ├── /rerktserver/grafana/eip      → read by aws-server promtail sync timer
@@ -69,7 +69,7 @@ All infrastructure is managed by Terraform in `terraform/`.
 | VPC + public subnet | Isolated network for Grafana EC2 |
 | EC2 (t3.micro) | Hosts the Docker Compose stack |
 | Elastic IP | Static public IP — DNS never needs updating |
-| Security Group | Port 443 (home IP), 22 (home IP), 3100 (portfolio EIP only) |
+| Security Group | Port 443 (home IP), 22 (home IP), 3100 (portfolio EIP only), 9100 (portfolio EIP only) |
 | IAM Role | `AmazonSSMManagedInstanceCore` — SSM deploy, no SSH in CI/CD |
 | Route53 A record | `grafana.rerktserver.com` → Elastic IP |
 | SSM Parameter Store | `/rerktserver/grafana/eip` and `/rerktserver/grafana/instance-id` |

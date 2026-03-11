@@ -1,5 +1,20 @@
 # Grafana Stack Runbook
 
+## Destroy Only (Tear Down to Save Cost)
+
+```bash
+cd aws-grafana/terraform
+terraform destroy
+```
+
+This deletes the grafana EC2, EIP, and SSM parameters (including `/rerktserver/grafana/eip`).
+
+**What happens automatically on aws-server:**
+- `sync-loki-url.timer` detects the SSM param is gone within 5 minutes
+- Promtail stops automatically — no manual action needed
+
+---
+
 ## Destroy and Recreate (Full Teardown)
 
 ```bash
