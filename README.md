@@ -12,21 +12,39 @@ Collects and visualizes logs from all containers running on the portfolio EC2 (r
 
 ## Architecture
 
+![Architecture Diagram](architecture.png)
+
+> Source: [architecture.drawio](architecture.drawio) — open with [draw.io](https://app.diagrams.net)
+
 ```
 portfolio EC2 (rerktserver.com)
   └── Promtail (systemd service)
-        ├── Docker socket → portfolio, rerkt-ai, bedrock-ai container logs
-        ├── /var/log/secure → SSH / auth events (CSPM)
-        └── /var/log/messages → system logs
+        ├── Docker socket  → portfolio, rerkt-ai, bedrock-ai container logs
+        ├── journald (sshd.service) → SSH login / auth events (CSPM)
+        └── journald (all units)    → system logs
               │
               │ HTTP :3100 (Security Group whitelist: portfolio EIP only)
               ▼
 Grafana EC2 (grafana.rerktserver.com)
   └── Docker Compose
-        ├── Loki      → log storage and query engine
-        ├── Promtail  → scrapes Grafana EC2 container logs
-        ├── Grafana   → visualization UI (port 3000, behind nginx)
-        └── nginx     → SSL termination, reverse proxy (ports 80/443)
+        ├── Loki       → log storage and query engine
+        ├── Promtail   → scrapes local Grafana EC2 container logs only
+        ├── Prometheus → metrics scraping (node-exporter :9100, cAdvisor :8080)
+        ├── Grafana    → visualization UI (port 3000, behind nginx)
+        └── nginx      → SSL termination, reverse proxy (ports 80/443)
+
+portfolio EC2 (rerktserver.com)
+  ├── node-exporter  :9100 → host metrics (CPU, memory, disk, network)
+  └── cAdvisor       :8080 → per-container metrics
+              │
+              │ HTTP :9100/:8080 (Security Group whitelist: grafana EIP only)
+              ▼
+        Prometheus (on Grafana EC2)
+
+SSM Parameter Store
+  ├── /rerktserver/grafana/eip      → read by aws-server promtail sync timer
+  ├── /rerktserver/grafana/instance-id → read by GitHub Actions deploy
+  └── /rerktserver/portfolio/eip    → read by aws-grafana prometheus at deploy
 ```
 
 ---
@@ -62,7 +80,7 @@ All infrastructure is managed by Terraform in `terraform/`.
 
 Terraform writes two parameters to AWS SSM on every `apply`:
 
-- `/rerktserver/grafana/eip` — Grafana Elastic IP (read by aws-server Promtail at boot)
+- `/rerktserver/grafana/eip` — Grafana Elastic IP (read by aws-server Promtail sync timer every 5 min)
 - `/rerktserver/grafana/instance-id` — EC2 instance ID (read by GitHub Actions deploy workflow)
 
 Terraform reads one parameter from SSM:
@@ -136,11 +154,14 @@ No instance IDs or IPs stored as secrets — those come from SSM.
 # nginx access logs (site visits)
 {container="portfolio"}
 
-# Failed SSH login attempts (CSPM)
-{job="auth"} |= "Failed password"
+# Failed SSH login attempts (CSPM) — via journald
+{job="auth"} |= "Failed"
+
+# Successful SSH logins (CSPM)
+{job="auth"} |= "Accepted publickey"
 
 # Sudo usage (CSPM)
-{job="auth"} |= "sudo"
+{job="system"} |= "sudo"
 
 # All system logs
 {job="system"}
