@@ -44,7 +44,22 @@ jobs:
           role-to-assume: ${{ env.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Check if Grafana instance exists
+        id: check
+        run: |
+          INSTANCE_ID=$(aws ssm get-parameter \
+            --name "${{ env.SSM_INSTANCE_PARAM }}" \
+            --query "Parameter.Value" \
+            --output text 2>/dev/null || echo "")
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Grafana instance not found in SSM — skipping deploy (stack is destroyed)"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Deploy via SSM
+        if: steps.check.outputs.skip != 'true'
         timeout-minutes: 15
         run: |
           INSTANCE_ID=$(aws ssm get-parameter \
