@@ -11,3 +11,12 @@ scrape_configs:
           instance: 'rerktserver.com'
           env: 'production'
 
+  # cAdvisor — per-container metrics (disabled on t3.nano — OOM risk)
+  # Uncomment if upgraded to t3.micro or larger (also re-enable in security.tf + deploy.yml)
+  # - job_name: 'cadvisor'
+  #   static_configs:
+  #     - targets: ['PORTFOLIO_EIP:8080']
+  #       labels:
+  #         instance: 'rerktserver.com'
+  #         env: 'production'
+
